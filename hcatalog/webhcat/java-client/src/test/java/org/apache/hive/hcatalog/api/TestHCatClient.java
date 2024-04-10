@@ -37,10 +37,16 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.IMetaStoreClient;
 import org.apache.hadoop.hive.metastore.MetaStoreTestUtils;
+import org.apache.hadoop.hive.metastore.TransactionalMetaStoreEventListener;
 import org.apache.hadoop.hive.metastore.Warehouse;
 import org.apache.hadoop.hive.metastore.api.MetaException;
 import org.apache.hadoop.hive.metastore.api.NotificationEvent;
 import org.apache.hadoop.hive.metastore.api.PartitionEventType;
+import org.apache.hadoop.hive.metastore.conf.MetastoreConf;
+// GBJ-TODO hadoop 3.3 upgrade unfinished
+// import org.apache.hadoop.hive.metastore.messaging.MessageEncoder;
+// import org.apache.hadoop.hive.metastore.messaging.json.JSONMessageEncoder;
+
 import org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat;
 import org.apache.hadoop.hive.ql.io.RCFileInputFormat;
 import org.apache.hadoop.hive.ql.io.RCFileOutputFormat;
@@ -80,7 +86,6 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertArrayEquals;
 
-import org.apache.hadoop.util.Shell;
 
 import javax.annotation.Nullable;
 
@@ -113,14 +118,17 @@ public class TestHCatClient {
       return;
     }
 
-    // Set proxy user privilege and initialize the global state of ProxyUsers
-    Configuration conf = new Configuration();
-    conf.set("hadoop.proxyuser." + Utils.getUGI().getShortUserName() + ".hosts", "*");
-    ProxyUsers.refreshSuperUserGroupsConfiguration(conf);
+    Configuration conf = MetastoreConf.newMetastoreConf();
 
-    System.setProperty(HiveConf.ConfVars.METASTORE_TRANSACTIONAL_EVENT_LISTENERS.varname,
-        DbNotificationListener.class.getName()); // turn on db notification listener on metastore
-    msPort = MetaStoreTestUtils.startMetaStoreWithRetry();
+    // Disable proxy authorization white-list for testing
+    MetastoreConf.setBoolVar(conf, MetastoreConf.ConfVars.EVENT_DB_NOTIFICATION_API_AUTH, false);
+
+    // turn on db notification listener on metastore
+    MetastoreConf.setClass(conf, MetastoreConf.ConfVars.TRANSACTIONAL_EVENT_LISTENERS, DbNotificationListener.class, TransactionalMetaStoreEventListener.class);
+    // GBJ-TODO hadoop 3.3 upgrade unfinished
+    // MetastoreConf.setClass(conf, MetastoreConf.ConfVars.EVENT_MESSAGE_FACTORY, JSONMessageEncoder.class, MessageEncoder.class);
+
+    msPort = MetaStoreTestUtils.startMetaStoreWithRetry(conf);
     securityManager = System.getSecurityManager();
     System.setSecurityManager(new NoExitSecurityManager());
     Policy.setPolicy(new DerbyPolicy());
